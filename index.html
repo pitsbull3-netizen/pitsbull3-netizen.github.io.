@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Андрей & Ольга — Свадебный фотоальбом</title>
-    <!-- Элегантные шрифты -->
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -21,7 +20,6 @@
             overflow-x: hidden;
         }
 
-        /* Фоновая текстура (лёгкий холст) */
         body::before {
             content: "";
             position: fixed;
@@ -36,7 +34,6 @@
             z-index: 0;
         }
 
-        /* Плавающие лепестки */
         .petals {
             position: fixed;
             top: 0;
@@ -67,7 +64,6 @@
             }
         }
 
-        /* Главный блок */
         .hero {
             position: relative;
             min-height: 100vh;
@@ -174,7 +170,6 @@
             border-color: #D9B48B;
         }
 
-        /* Модалки */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -230,11 +225,6 @@
             color: #CBB59A;
             transition: 0.2s;
         }
-        .modal-close:hover {
-            color: #9B7A5C;
-        }
-
-        /* Upload зона */
         .upload-area {
             border: 2px dashed #F0DECC;
             border-radius: 32px;
@@ -293,8 +283,6 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
-
-        /* Галерея */
         .gallery-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -330,7 +318,6 @@
             text-align: center;
             opacity: 0;
             transition: 0.2s;
-            font-weight: 400;
         }
         .gallery-item:hover .overlay {
             opacity: 1;
@@ -350,8 +337,6 @@
             overflow-y: auto;
             padding-right: 0.3rem;
         }
-
-        /* Лайтбокс */
         .lightbox {
             display: none;
             position: fixed;
@@ -393,7 +378,6 @@
             font-family: 'Raleway', sans-serif;
             font-weight: 500;
             backdrop-filter: blur(8px);
-            transition: 0.2s;
         }
         .lightbox-btn:hover {
             background: rgba(217,180,139,0.5);
@@ -409,7 +393,6 @@
             font-size: 2rem;
             cursor: pointer;
         }
-
         .toast {
             position: fixed;
             bottom: 2rem;
@@ -422,7 +405,6 @@
             font-size: 0.85rem;
             transition: 0.3s;
             z-index: 3000;
-            font-family: 'Raleway', sans-serif;
         }
         .toast.show {
             transform: translateX(-50%) translateY(0);
@@ -452,7 +434,7 @@
         <div class="date">1 августа 2026</div>
         <div class="divider"></div>
         <p class="hero-text">
-            Дорогие наши гости! Давайте сохраним самые тёплые мгновения этого дня вместе.<br>
+            Дорогие гости! Давайте сохраним самые тёплые мгновения этого дня вместе.<br>
             Загружайте свои фото — и они сразу попадут в общий альбом.
         </p>
         <div class="buttons">
@@ -525,15 +507,14 @@
 <div class="footer">Сделано с любовью | Андрей & Ольга | 1 августа 2026</div>
 
 <script>
-    // ========== НАСТРОЙКИ (ВАШИ ДАННЫЕ) ==========
-    const RADIKAL_API_KEY = 'chv_Exkg_b58cf965cdb9fc6f40770fa1f498b897c55c4de19422a734bcac6d8a162a1f06919b517dd523fa195d8fb03f91270e2306fbae24a84734db4a3a2eb132548c63';
-    const ALBUM_ID = 'evKzH';   // из адреса https://radikal.cloud/album/evKzH
+    // ========== ВАШИ ДАННЫЕ ==========
+    const IMGBB_API_KEY = '9432191b49fc4c02f1296699ca849975';
+    const ALBUM_ID = 'RTbDyX';
 
     // Глобальные переменные
     let selectedFile = null;
     let currentPhotos = [];
 
-    // ========== ВСПОМОГАТЕЛЬНЫЕ ==========
     function showToast(msg) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
@@ -558,7 +539,7 @@
         loadGallery();
     }
 
-    // ========== ЗАГРУЗКА ==========
+    // Загрузка фото
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#D9B48B'; });
@@ -595,18 +576,17 @@
         fill.style.width = '40%';
 
         const formData = new FormData();
-        formData.append('source', selectedFile);
-        formData.append('title', `${guestName}_${Date.now()}`);
-        formData.append('album_id', ALBUM_ID);
+        formData.append('image', selectedFile);
+        formData.append('name', `${guestName}_${Date.now()}`);
+        formData.append('album', ALBUM_ID);
 
         try {
-            const response = await fetch('https://radikal.cloud/api/1/upload', {
+            const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
                 method: 'POST',
-                headers: { 'X-API-Key': RADIKAL_API_KEY },
                 body: formData
             });
             const data = await response.json();
-            if (data.status_code === 200) {
+            if (data.success) {
                 fill.style.width = '100%';
                 setTimeout(() => {
                     document.getElementById('uploadForm').style.display = 'none';
@@ -637,15 +617,16 @@
         document.getElementById('successMsg').style.display = 'none';
     }
 
-    // ========== ГАЛЕРЕЯ (API Radikal.cloud) ==========
+    // Загрузка альбома
     async function loadGallery() {
         try {
-            const url = `https://radikal.cloud/api/1/album/${ALBUM_ID}`;
-            const response = await fetch(url, { headers: { 'X-API-Key': RADIKAL_API_KEY } });
+            const url = `https://api.imgbb.com/1/album/${ALBUM_ID}?key=${IMGBB_API_KEY}`;
+            const response = await fetch(url);
             const data = await response.json();
-            if (data.status_code === 200 && data.images && data.images.length) {
-                const images = data.images;
-                images.sort((a,b) => new Date(b.date_gmt) - new Date(a.date_gmt));
+            if (data.success && data.data && data.data.images) {
+                const images = data.data.images;
+                if (images.length === 0) { showEmptyGallery(); return; }
+                images.sort((a,b) => (b.time || 0) - (a.time || 0));
                 renderGallery(images);
                 currentPhotos = images;
             } else {
@@ -654,7 +635,7 @@
         } catch (err) {
             console.error(err);
             showEmptyGallery();
-            showToast('Не удалось загрузить альбом, попробуйте позже');
+            showToast('Не удалось загрузить альбом');
         }
     }
 
@@ -669,7 +650,7 @@
         photos.forEach((photo, idx) => {
             const thumb = photo.thumb?.url || photo.url;
             const name = photo.title ? photo.title.split('_')[0] : 'Гость';
-            const date = photo.date_gmt ? new Date(photo.date_gmt).toLocaleString() : '';
+            const date = photo.time ? new Date(photo.time * 1000).toLocaleString() : '';
             const div = document.createElement('div');
             div.className = 'gallery-item';
             div.innerHTML = `<img src="${thumb}" loading="lazy" alt="wedding"><div class="overlay">${escapeHtml(name)}<br>${date}</div>`;
@@ -684,7 +665,7 @@
         currentPhotos = [];
     }
 
-    // ========== ЛАЙТБОКС И СКАЧИВАНИЕ ==========
+    // Лайтбокс и скачивание
     let currentLightboxIndex = 0;
     function openLightbox(index) {
         if (!currentPhotos.length) return;
@@ -710,7 +691,6 @@
         showToast('Скачивание начато');
     }
 
-    // ========== КЛАВИАТУРА ==========
     document.addEventListener('keydown', (e) => {
         if (document.getElementById('lightbox').classList.contains('active') && e.key === 'Escape') closeLightbox();
         if (e.key === 'Escape') {
@@ -724,11 +704,10 @@
         return str.replace(/[&<>]/g, (m) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m] || m));
     }
 
-    // Плавающие лепестки
+    // Лепестки
     function createPetals() {
         const container = document.getElementById('petalsContainer');
-        const petalCount = 18;
-        for (let i = 0; i < petalCount; i++) {
+        for (let i = 0; i < 18; i++) {
             const petal = document.createElement('div');
             petal.className = 'petal';
             const size = 10 + Math.random() * 18;
