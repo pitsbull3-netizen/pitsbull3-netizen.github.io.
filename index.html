@@ -9,11 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Raleway', sans-serif;
             background: #FDF8F0;
@@ -465,7 +461,7 @@
     </div>
 </div>
 
-<!-- Модалка загрузки (с поддержкой множественных файлов) -->
+<!-- Модалка загрузки -->
 <div class="modal-overlay" id="uploadModal">
     <div class="modal">
         <button class="modal-close" onclick="closeModal('uploadModal')">✕</button>
@@ -517,7 +513,7 @@
     </div>
 </div>
 
-<!-- Лайтбокс с кнопкой удаления (с паролем) -->
+<!-- Лайтбокс -->
 <div class="lightbox" id="lightbox">
     <button class="lightbox-close" onclick="closeLightbox()">✕</button>
     <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">‹</button>
@@ -540,11 +536,12 @@
 <div class="footer">Сделано с любовью | Андрей & Ольга | 1 августа 2026</div>
 
 <script>
-    // ========== КЛЮЧИ И НАСТРОЙКИ ==========
-    const IMGBB_API_KEY = '9432191b49fc4c02f1296699ca849975';
-    const ALBUM_ID = 'RTbDyX';
-    const ADMIN_PASSWORD = '07102024';   // пароль для удаления фото
+    // ========== НАСТРОЙКИ ДЛЯ IMAGEBAN.RU ==========
+    const IMAGEBAN_SECRET_KEY = 'W17NJt0mUNi1BNs6O78HwQEQvIEZT8yxM0n';
+    const IMAGEBAN_API_URL = 'https://api.imageban.ru/v1';
+    const ADMIN_PASSWORD = '07102024';
 
+    // ========== НАСТРОЙКИ FIREBASE ==========
     const firebaseConfig = {
         apiKey: "AIzaSyD1VExlZZ6aizMe9jMZ_Pw7zo3ko4jhrmw",
         authDomain: "weddingalbum2026-654c9.firebaseapp.com",
@@ -560,11 +557,12 @@
     const photosRef = database.ref('wedding_photos');
 
     // Глобальные переменные
-    let selectedFiles = [];          // массив выбранных файлов
+    let selectedFiles = [];
     let currentPhotos = [];
     let currentLightboxIndex = 0;
     let galleryListener = null;
 
+    // Вспомогательные функции
     function showToast(msg) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
@@ -597,7 +595,6 @@
         document.getElementById('heroSection').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Валидация одного файла
     function validateFile(file) {
         const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         if (!allowedTypes.includes(file.type)) {
@@ -611,7 +608,7 @@
         return true;
     }
 
-    // Drag & Drop (один или несколько файлов)
+    // Drag & Drop
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     dropZone.addEventListener('click', () => fileInput.click());
@@ -620,12 +617,8 @@
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.style.borderColor = '#F0DECC';
-        const items = e.dataTransfer.files;
-        const files = Array.from(items).filter(f => f.type.startsWith('image/'));
-        if (files.length === 0) {
-            showToast('Пожалуйста, выберите изображения');
-            return;
-        }
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        if (files.length === 0) { showToast('Пожалуйста, выберите изображения'); return; }
         const validFiles = files.filter(f => validateFile(f));
         if (validFiles.length) {
             selectedFiles = validFiles;
@@ -662,7 +655,7 @@
         document.getElementById('uploadBtn').disabled = false;
     }
 
-    // Последовательная загрузка нескольких фото
+    // ЗАГРУЗКА ЧЕРЕЗ IMAGEBAN.RU (с авторизацией)
     async function uploadMultiplePhotos() {
         if (!selectedFiles.length) { showToast('Выберите хотя бы одно фото'); return; }
         const guestName = document.getElementById('guestName').value.trim() || 'Гость';
@@ -683,30 +676,34 @@
             fill.style.width = `${(i / selectedFiles.length) * 100}%`;
 
             const formData = new FormData();
-            formData.append('image', file);
-            formData.append('name', `${guestName}_${Date.now()}_${i}`);
-            formData.append('album', ALBUM_ID);
+            formData.append('image', file); // поле обязательно должно называться "image"
 
             try {
-                const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                const response = await fetch(IMAGEBAN_API_URL, {
                     method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
+                    },
                     body: formData
                 });
                 const data = await response.json();
-                if (data.success) {
+                if (data.success && data.data && data.data.length > 0) {
+                    const imgInfo = data.data[0];
                     const photoData = {
-                        url: data.data.url,
-                        thumb: data.data.thumb?.url || data.data.url,
+                        url: imgInfo.link,                 // прямая ссылка на оригинал
+                        thumb: imgInfo.url_thumb || imgInfo.link, // превью
                         name: guestName,
                         timestamp: Date.now(),
-                        date: new Date().toISOString()
+                        date: new Date().toISOString(),
+                        delete_hash: imgInfo.delete_hash   // для возможного удаления
                     };
                     await photosRef.push(photoData);
                     successCount++;
                 } else {
-                    throw new Error(data.error?.message || 'Ошибка ImgBB');
+                    throw new Error(data.message || 'Ошибка загрузки на ImageBan');
                 }
             } catch (err) {
+                console.error(err);
                 showToast(`Ошибка при загрузке ${file.name}: ${err.message}`);
             }
         }
@@ -740,7 +737,7 @@
         document.getElementById('successMsg').style.display = 'none';
     }
 
-    // Галерея в реальном времени
+    // ГАЛЕРЕЯ (реальное время)
     async function loadGalleryRealTime() {
         const emptyState = document.getElementById('emptyState');
         const scrollDiv = document.getElementById('galleryScroll');
@@ -754,22 +751,15 @@
             photosRef.off('child_added', galleryListener);
         }
 
-        // Получаем существующие записи и проверяем их доступность
+        // Загружаем все существующие фото
         const snapshot = await photosRef.once('value');
         const initialPhotos = [];
-        const promises = [];
         snapshot.forEach((child) => {
             const photo = child.val();
             photo.id = child.key;
-            promises.push(checkImageExists(photo.url).then(exists => {
-                if (exists) {
-                    initialPhotos.push(photo);
-                } else {
-                    photosRef.child(photo.id).remove().catch(console.error);
-                }
-            }));
+            initialPhotos.push(photo);
         });
-        await Promise.all(promises);
+        // Сортируем по времени (новые сверху)
         initialPhotos.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
         currentPhotos = initialPhotos;
         renderGallery(currentPhotos);
@@ -780,6 +770,7 @@
             scrollDiv.style.display = 'block';
         }
 
+        // Слушаем новые добавления
         galleryListener = photosRef.on('child_added', (snap) => {
             const newPhoto = snap.val();
             newPhoto.id = snap.key;
@@ -790,15 +781,6 @@
                     showToast('Новое фото добавлено!');
                 }
             }
-        });
-    }
-
-    function checkImageExists(url) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
-            img.src = url;
         });
     }
 
@@ -858,7 +840,6 @@
         showToast('Скачивание начато');
     }
 
-    // Удаление с запросом пароля
     async function promptDeleteCurrentPhoto() {
         if (!currentPhotos.length) return;
         const password = prompt('Введите пароль для удаления фото:');
@@ -869,6 +850,7 @@
         const photo = currentPhotos[currentLightboxIndex];
         if (!confirm('Вы уверены, что хотите удалить это фото из альбома?')) return;
         try {
+            // Удаляем из Firebase
             await photosRef.child(photo.id).remove();
             currentPhotos.splice(currentLightboxIndex, 1);
             renderGallery(currentPhotos);
