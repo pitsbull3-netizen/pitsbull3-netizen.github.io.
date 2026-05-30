@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -631,7 +631,7 @@
         document.getElementById('uploadBtn').disabled = false;
     }
 
-    // --- ЗАГРУЗКА ФОТО (теперь с правильным указанием альбома) ---
+    // --- ЗАГРУЗКА ФОТО В АЛЬБОМ (РАБОТАЕТ) ---
     async function uploadMultiplePhotos() {
         if (!selectedFiles.length) { showToast('Выберите хотя бы одно фото'); return; }
         const guestName = document.getElementById('guestName').value.trim() || 'Гость';
@@ -653,7 +653,6 @@
 
             const formData = new FormData();
             formData.append('image', file);
-            // ВАЖНО! Указываем ID альбома
             formData.append('album', ALBUM_ID);
             formData.append('name', guestName);
 
@@ -710,51 +709,70 @@
         document.getElementById('successMsg').style.display = 'none';
     }
 
-    // --- ПОЛУЧЕНИЕ ФОТО ИЗ АЛЬБОМА (ПРАВИЛЬНЫЙ ЗАПРОС) ---
+    // --- ПОЛУЧЕНИЕ ФОТО ИЗ АЛЬБОМА (ИСПРАВЛЕННАЯ ВЕРСИЯ) ---
     async function loadAlbumPhotos() {
         const emptyState = document.getElementById('emptyState');
         const scrollDiv = document.getElementById('galleryScroll');
         const loader = document.getElementById('galleryLoader');
+        
         emptyState.style.display = 'none';
         scrollDiv.style.display = 'none';
         loader.style.display = 'block';
         currentPhotos = [];
 
         try {
-            // Формируем правильный URL для получения информации об альбоме
+            console.log('Запрос к API:', `${API_URL}/album/${ALBUM_ID}`);
+            
             const response = await fetch(`${API_URL}/album/${ALBUM_ID}`, {
+                method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
                 }
             });
-            const data = await response.json();
-            // Проверяем ответ: поле success и наличие массива image внутри data
-            if (data && data.success === true && data.data && data.data.image && Array.isArray(data.data.image)) {
-                // Преобразуем данные для отображения
-                currentPhotos = data.data.image.map(img => ({
-                    url: img.link,
-                    thumb: img.link,
-                    name: img.img_name || img.name || 'Гость',
+
+            if (!response.ok) {
+                throw new Error(`Ошибка сети: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Полный ответ от сервера:', result);
+
+            // ПРАВИЛЬНАЯ СТРУКТУРА: result.success, result.data.image
+            if (result.success && result.data && Array.isArray(result.data.image)) {
+                const images = result.data.image;
+                console.log(`Найдено фото в альбоме: ${images.length}`);
+
+                currentPhotos = images.map(img => ({
                     id: img.id,
+                    url: img.link,
+                    thumb: img.url_thumb || img.link,
+                    name: img.img_name || 'Гость',
                     date: img.date
                 }));
-                // Сортируем от новых к старым
-                currentPhotos.sort((a, b) => (b.date || 0).localeCompare(a.date || 0));
+
+                currentPhotos.sort((a, b) => {
+                    if (!a.date) return 1;
+                    if (!b.date) return -1;
+                    return b.date.localeCompare(a.date);
+                });
+
                 renderGallery(currentPhotos);
             } else {
-                console.warn('Нет фото или ошибка API', data);
-                currentPhotos = [];
-                renderGallery(currentPhotos);
+                console.warn('Альбом пуст или структура ответа странная', result);
+                if (result.data && result.data.image_count === 0) {
+                    emptyState.style.display = 'block';
+                } else {
+                    showToast('Нет фото или ошибка доступа');
+                }
             }
         } catch (err) {
-            console.error('Ошибка загрузки альбома:', err);
-            showToast('Не удалось загрузить альбом. Попробуйте позже.');
-        }
-        loader.style.display = 'none';
-        if (currentPhotos.length === 0) {
-            emptyState.style.display = 'block';
-        } else {
-            scrollDiv.style.display = 'block';
+            console.error('КРИТИЧЕСКАЯ ОШИБКА:', err);
+            showToast('Не удалось загрузить альбом. См. консоль (F12).');
+        } finally {
+            loader.style.display = 'none';
+            if (currentPhotos.length > 0) {
+                scrollDiv.style.display = 'block';
+            }
         }
     }
 
