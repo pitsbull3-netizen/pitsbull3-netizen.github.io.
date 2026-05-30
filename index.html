@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Андрей & Ольга — Свадебный альбом</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -245,26 +248,139 @@
             color: #B68B6E;
             text-align: center;
         }
-        .iframe-container {
-            width: 100%;
-            height: 70vh;
-            border-radius: 24px;
-            overflow: hidden;
-            border: 1px solid #EEDDCB;
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
         }
-        iframe {
+        .gallery-item {
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #f0e6dc;
+        }
+        .gallery-item img {
             width: 100%;
             height: 100%;
-            border: none;
+            object-fit: cover;
+        }
+        .gallery-item .overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 6px 8px;
+            font-size: 12px;
+            text-align: center;
+            font-weight: 500;
+            backdrop-filter: blur(4px);
         }
         .empty-state {
             text-align: center;
             padding: 3rem;
             color: #CBB59A;
         }
+        .empty-icon { font-size: 4rem; opacity: 0.5; }
         .gallery-scroll {
-            max-height: 70vh;
+            max-height: 60vh;
             overflow-y: auto;
+            padding-right: 0.3rem;
+        }
+        .loader {
+            text-align: center;
+            padding: 2rem;
+            color: #D9B48B;
+        }
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid #F0DECC;
+            border-top-color: #D9B48B;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 90vw;
+            max-height: 70vh;
+            border-radius: 16px;
+            object-fit: contain;
+        }
+        .lightbox-controls {
+            position: absolute;
+            bottom: 2rem;
+            left: 0;
+            right: 0;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+        .lightbox-btn {
+            background: rgba(255,240,225,0.2);
+            border: 1px solid rgba(255,225,200,0.5);
+            color: #FBEAD8;
+            padding: 0.5rem 1.2rem;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .lightbox-btn:hover {
+            background: #D9B48B;
+            color: #3A2C1F;
+        }
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.5);
+            border: none;
+            color: white;
+            font-size: 2rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lightbox-nav:hover { background: rgba(0,0,0,0.8); }
+        .lightbox-prev { left: 1rem; }
+        .lightbox-next { right: 1rem; }
+        .lightbox-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(0,0,0,0.6);
+            border: none;
+            color: white;
+            font-size: 1.8rem;
+            cursor: pointer;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
         }
         .bottom-nav {
             position: fixed;
@@ -318,8 +434,9 @@
             color: #CFB99F;
         }
         @media (max-width: 550px) {
+            .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
             .modal-body { padding: 1rem; }
-            .iframe-container { height: 60vh; }
+            .lightbox-nav { width: 36px; height: 36px; font-size: 1.5rem; }
         }
     </style>
 </head>
@@ -343,7 +460,7 @@
     </div>
 </div>
 
-<!-- Модалка загрузки (работает через API) -->
+<!-- Модалка загрузки -->
 <div class="modal-overlay" id="uploadModal">
     <div class="modal">
         <button class="modal-close" onclick="closeModal('uploadModal')">✕</button>
@@ -372,16 +489,38 @@
     </div>
 </div>
 
-<!-- Модалка галереи: просто iframe с альбомом -->
+<!-- Модалка галереи -->
 <div class="modal-overlay" id="galleryModal">
     <div class="modal">
         <button class="modal-close" onclick="closeModal('galleryModal')">✕</button>
         <div class="modal-header"><h2>🌸 Общий альбом</h2><p>Фотографии гостей</p></div>
         <div class="modal-body">
-            <div class="iframe-container">
-                <iframe src="https://imageban.ru/a/my4n9zV" title="Свадебный альбом"></iframe>
+            <div id="galleryContent">
+                <div class="empty-state" id="emptyState" style="display:none">
+                    <div class="empty-icon">📷</div>
+                    <p>Пока нет загруженных фото</p>
+                </div>
+                <div id="galleryLoader" class="loader" style="display:block">
+                    <div class="spinner"></div>
+                    <p>Загрузка фото...</p>
+                </div>
+                <div class="gallery-scroll" id="galleryScroll" style="display:none">
+                    <div class="gallery-grid" id="galleryGrid"></div>
+                </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Лайтбокс -->
+<div class="lightbox" id="lightbox">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <button class="lightbox-nav lightbox-prev" onclick="navigateLightbox(-1)">‹</button>
+    <img id="lightboxImg" src="" alt="">
+    <button class="lightbox-nav lightbox-next" onclick="navigateLightbox(1)">›</button>
+    <div class="lightbox-controls">
+        <button class="lightbox-btn" onclick="downloadCurrentPhoto()">💾 Скачать</button>
+        <button class="lightbox-btn" id="deletePhotoBtn" onclick="promptDeleteCurrentPhoto()">🗑 Удалить</button>
     </div>
 </div>
 
@@ -396,41 +535,68 @@
 <div class="footer">Сделано с любовью | Андрей & Ольга | 1 августа 2026</div>
 
 <script>
-    // ========== ДАННЫЕ ДЛЯ IMAGEBAN (загрузка) ==========
+    // ========== НАСТРОЙКИ ==========
+    // Ваши ключи ImageBan
     const IMAGEBAN_SECRET_KEY = 'W17NJt0mUNi1BNs6O78HwQEQvIEZT8yxM0n';
-    const ALBUM_ID = 'my4n9zV';
-    const API_URL = 'https://api.imageban.ru/v1';
+    const ALBUM_ID = 'my4n9zV';          // ID альбома (для загрузки)
+    const IMAGEBAN_API_URL = 'https://api.imageban.ru/v1';
+    
+    // Настройки Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyD1VExlZZ6aizMe9jMZ_Pw7zo3ko4jhrmw",
+        authDomain: "weddingalbum2026-654c9.firebaseapp.com",
+        databaseURL: "https://weddingalbum2026-654c9-default-rtdb.firebaseio.com",
+        projectId: "weddingalbum2026-654c9",
+        storageBucket: "weddingalbum2026-654c9.firebasestorage.app",
+        messagingSenderId: "32362172364",
+        appId: "1:32362172364:web:422533879dfe3a95859769"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const photosRef = database.ref('wedding_photos');
+    
     const ADMIN_PASSWORD = '07102024';
-
+    
+    // Глобальные переменные
     let selectedFiles = [];
-
+    let currentPhotos = [];
+    let currentLightboxIndex = 0;
+    let galleryListener = null;
+    
+    // Вспомогательные функции
     function showToast(msg) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
-
+    
     function closeModal(id) {
         document.getElementById(id).classList.remove('active');
         document.body.style.overflow = '';
+        if (id === 'galleryModal' && galleryListener) {
+            photosRef.off('child_added', galleryListener);
+            galleryListener = null;
+        }
     }
-
+    
     function openUploadModal() {
         resetUpload();
         document.getElementById('uploadModal').classList.add('active');
         document.body.style.overflow = 'hidden';
     }
-
+    
     function openGalleryModal() {
         document.getElementById('galleryModal').classList.add('active');
         document.body.style.overflow = 'hidden';
+        loadGalleryRealTime();
     }
-
+    
     function scrollToHero() {
         document.getElementById('heroSection').scrollIntoView({ behavior: 'smooth' });
     }
-
+    
     function validateFile(file) {
         const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         if (!allowedTypes.includes(file.type)) {
@@ -443,7 +609,8 @@
         }
         return true;
     }
-
+    
+    // Drag & Drop
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     dropZone.addEventListener('click', () => fileInput.click());
@@ -473,7 +640,7 @@
             }
         }
     });
-
+    
     function showMultiplePreview(files) {
         const container = document.getElementById('previewContainer');
         container.innerHTML = '';
@@ -489,7 +656,8 @@
         });
         document.getElementById('uploadBtn').disabled = false;
     }
-
+    
+    // ЗАГРУЗКА на ImageBan + сохранение в Firebase
     async function uploadMultiplePhotos() {
         if (!selectedFiles.length) { showToast('Выберите хотя бы одно фото'); return; }
         const guestName = document.getElementById('guestName').value.trim() || 'Гость';
@@ -497,25 +665,25 @@
         const progressBar = document.getElementById('progressBar');
         const fill = document.getElementById('progressFill');
         const statusDiv = document.getElementById('uploadStatus');
-
+        
         btn.disabled = true;
         btn.innerHTML = '⏳ Загрузка...';
         progressBar.classList.add('active');
         statusDiv.textContent = `Загрузка 0 из ${selectedFiles.length}`;
-
+        
         let successCount = 0;
         for (let i = 0; i < selectedFiles.length; i++) {
             const file = selectedFiles[i];
             statusDiv.textContent = `Загрузка ${i+1} из ${selectedFiles.length}: ${file.name}`;
             fill.style.width = `${(i / selectedFiles.length) * 100}%`;
-
+            
             const formData = new FormData();
             formData.append('image', file);
             formData.append('album', ALBUM_ID);
             formData.append('name', guestName);
-
+            
             try {
-                const response = await fetch(API_URL, {
+                const response = await fetch(IMAGEBAN_API_URL, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
@@ -524,13 +692,22 @@
                 });
                 const data = await response.json();
                 if (data && data.success === true && data.data && data.data.length > 0) {
+                    const imgInfo = data.data[0];
+                    const photoData = {
+                        url: imgInfo.link,
+                        thumb: imgInfo.url_thumb || imgInfo.link,
+                        name: guestName,
+                        timestamp: Date.now(),
+                        date: new Date().toISOString()
+                    };
+                    await photosRef.push(photoData);
                     successCount++;
                 } else {
-                    throw new Error(data.message || 'Ошибка API');
+                    throw new Error(data.message || 'Ошибка загрузки на ImageBan');
                 }
             } catch (err) {
                 console.error(err);
-                showToast(`Ошибка: ${err.message}`);
+                showToast(`Ошибка при загрузке ${file.name}: ${err.message}`);
             }
         }
         fill.style.width = '100%';
@@ -548,7 +725,7 @@
             progressBar.classList.remove('active');
         }
     }
-
+    
     function resetUpload() {
         selectedFiles = [];
         fileInput.value = '';
@@ -562,13 +739,147 @@
         document.getElementById('uploadForm').style.display = 'block';
         document.getElementById('successMsg').style.display = 'none';
     }
-
+    
+    // ГАЛЕРЕЯ (реальное время из Firebase)
+    async function loadGalleryRealTime() {
+        const emptyState = document.getElementById('emptyState');
+        const scrollDiv = document.getElementById('galleryScroll');
+        const loader = document.getElementById('galleryLoader');
+        emptyState.style.display = 'none';
+        scrollDiv.style.display = 'none';
+        loader.style.display = 'block';
+        currentPhotos = [];
+        
+        if (galleryListener) {
+            photosRef.off('child_added', galleryListener);
+        }
+        
+        const snapshot = await photosRef.once('value');
+        const initialPhotos = [];
+        snapshot.forEach((child) => {
+            const photo = child.val();
+            photo.id = child.key;
+            initialPhotos.push(photo);
+        });
+        initialPhotos.sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
+        currentPhotos = initialPhotos;
+        renderGallery(currentPhotos);
+        loader.style.display = 'none';
+        if (currentPhotos.length === 0) {
+            emptyState.style.display = 'block';
+        } else {
+            scrollDiv.style.display = 'block';
+        }
+        
+        galleryListener = photosRef.on('child_added', (snap) => {
+            const newPhoto = snap.val();
+            newPhoto.id = snap.key;
+            if (!currentPhotos.some(p => p.id === newPhoto.id)) {
+                currentPhotos.unshift(newPhoto);
+                renderGallery(currentPhotos);
+                if (document.getElementById('galleryModal').classList.contains('active')) {
+                    showToast('Новое фото добавлено!');
+                }
+            }
+        });
+    }
+    
+    function renderGallery(photos) {
+        const grid = document.getElementById('galleryGrid');
+        const empty = document.getElementById('emptyState');
+        const scroll = document.getElementById('galleryScroll');
+        if (!photos.length) {
+            empty.style.display = 'block';
+            scroll.style.display = 'none';
+            return;
+        }
+        empty.style.display = 'none';
+        scroll.style.display = 'block';
+        grid.innerHTML = '';
+        photos.forEach((photo, idx) => {
+            const thumb = photo.thumb || photo.url;
+            const name = photo.name || 'Гость';
+            const date = photo.date ? new Date(photo.date).toLocaleString() : '';
+            const div = document.createElement('div');
+            div.className = 'gallery-item';
+            div.innerHTML = `<img src="${thumb}" loading="lazy" alt="wedding"><div class="overlay">${escapeHtml(name)}<br>${date}</div>`;
+            div.onclick = () => openLightbox(idx);
+            grid.appendChild(div);
+        });
+    }
+    
+    function openLightbox(index) {
+        if (!currentPhotos.length) return;
+        currentLightboxIndex = index;
+        const photo = currentPhotos[index];
+        document.getElementById('lightboxImg').src = photo.url;
+        document.getElementById('lightbox').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    
+    function navigateLightbox(direction) {
+        if (!currentPhotos.length) return;
+        currentLightboxIndex = (currentLightboxIndex + direction + currentPhotos.length) % currentPhotos.length;
+        const photo = currentPhotos[currentLightboxIndex];
+        document.getElementById('lightboxImg').src = photo.url;
+    }
+    
+    function downloadCurrentPhoto() {
+        const img = document.getElementById('lightboxImg');
+        const link = document.createElement('a');
+        link.href = img.src;
+        link.download = `wedding_photo_${Date.now()}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showToast('Скачивание начато');
+    }
+    
+    async function promptDeleteCurrentPhoto() {
+        if (!currentPhotos.length) return;
+        const password = prompt('Введите пароль для удаления фото:');
+        if (password !== ADMIN_PASSWORD) {
+            showToast('Неверный пароль. Удаление отменено.');
+            return;
+        }
+        const photo = currentPhotos[currentLightboxIndex];
+        if (!confirm('Вы уверены, что хотите удалить это фото из альбома?')) return;
+        try {
+            await photosRef.child(photo.id).remove();
+            currentPhotos.splice(currentLightboxIndex, 1);
+            renderGallery(currentPhotos);
+            closeLightbox();
+            showToast('Фото удалено');
+            if (currentPhotos.length === 0 && document.getElementById('galleryModal').classList.contains('active')) {
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('galleryScroll').style.display = 'none';
+            }
+        } catch (err) {
+            showToast('Ошибка удаления: ' + err.message);
+        }
+    }
+    
     document.addEventListener('keydown', (e) => {
+        if (document.getElementById('lightbox').classList.contains('active')) {
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') navigateLightbox(-1);
+            if (e.key === 'ArrowRight') navigateLightbox(1);
+        }
         if (e.key === 'Escape') {
             document.querySelectorAll('.modal-overlay.active').forEach(m => closeModal(m.id));
         }
     });
-
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, (m) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m] || m));
+    }
+    
     function createPetals() {
         const container = document.getElementById('petalsContainer');
         for (let i = 0; i < 20; i++) {
