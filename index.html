@@ -700,7 +700,15 @@
                         timestamp: Date.now(),
                         date: new Date().toISOString()
                     };
-                    await photosRef.push(photoData);
+                    try {
+    const newRef = await photosRef.push(photoData);
+    console.log("✅ Данные успешно записаны в Firebase! ID:", newRef.key);
+    successCount++;
+} catch (fbError) {
+    console.error("❌ Ошибка записи в Firebase:", fbError);
+    showToast("Ошибка сохранения в базу: " + fbError.message);
+    // Продолжаем цикл, но successCount не увеличиваем
+}
                     successCount++;
                 } else {
                     throw new Error(data.message || 'Ошибка загрузки на ImageBan');
