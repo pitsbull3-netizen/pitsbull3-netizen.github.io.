@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -537,6 +537,11 @@
     const ALBUM_ID = 'my4n9zV';
     const API_URL = 'https://api.imageban.ru/v1';
     const ADMIN_PASSWORD = '07102024';
+    
+    // Публичный CORS-прокси (обход ограничений браузера)
+    // Для первого использования может потребоваться перейти по ссылке и нажать "Request temporary access"
+    // https://cors-anywhere.herokuapp.com/corsdemo
+    const CORS_PROXY = 'https://cors-anywhere.herokuapp.com/';
 
     // Глобальные переменные
     let selectedFiles = [];
@@ -631,7 +636,7 @@
         document.getElementById('uploadBtn').disabled = false;
     }
 
-    // --- ЗАГРУЗКА ФОТО В АЛЬБОМ (РАБОТАЕТ) ---
+    // --- ЗАГРУЗКА ФОТО В АЛЬБОМ (через прокси, т.к. CORS мешает и при загрузке) ---
     async function uploadMultiplePhotos() {
         if (!selectedFiles.length) { showToast('Выберите хотя бы одно фото'); return; }
         const guestName = document.getElementById('guestName').value.trim() || 'Гость';
@@ -657,7 +662,9 @@
             formData.append('name', guestName);
 
             try {
-                const response = await fetch(API_URL, {
+                // Используем прокси для POST-запроса
+                const proxyUrl = CORS_PROXY + API_URL;
+                const response = await fetch(proxyUrl, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
@@ -709,7 +716,7 @@
         document.getElementById('successMsg').style.display = 'none';
     }
 
-    // --- ПОЛУЧЕНИЕ ФОТО ИЗ АЛЬБОМА (ИСПРАВЛЕННАЯ ВЕРСИЯ) ---
+    // --- ПОЛУЧЕНИЕ ФОТО ИЗ АЛЬБОМА (через CORS-прокси) ---
     async function loadAlbumPhotos() {
         const emptyState = document.getElementById('emptyState');
         const scrollDiv = document.getElementById('galleryScroll');
@@ -721,9 +728,12 @@
         currentPhotos = [];
 
         try {
-            console.log('Запрос к API:', `${API_URL}/album/${ALBUM_ID}`);
+            // Используем прокси для GET-запроса
+            const targetUrl = `${API_URL}/album/${ALBUM_ID}`;
+            const proxyUrl = CORS_PROXY + targetUrl;
+            console.log('Запрос через прокси:', proxyUrl);
             
-            const response = await fetch(`${API_URL}/album/${ALBUM_ID}`, {
+            const response = await fetch(proxyUrl, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
@@ -737,7 +747,7 @@
             const result = await response.json();
             console.log('Полный ответ от сервера:', result);
 
-            // ПРАВИЛЬНАЯ СТРУКТУРА: result.success, result.data.image
+            // Правильная структура: result.success, result.data.image
             if (result.success && result.data && Array.isArray(result.data.image)) {
                 const images = result.data.image;
                 console.log(`Найдено фото в альбоме: ${images.length}`);
@@ -767,7 +777,7 @@
             }
         } catch (err) {
             console.error('КРИТИЧЕСКАЯ ОШИБКА:', err);
-            showToast('Не удалось загрузить альбом. См. консоль (F12).');
+            showToast('Не удалось загрузить альбом. Возможно, требуется разрешить CORS-прокси. Откройте ссылку: https://cors-anywhere.herokuapp.com/corsdemo');
         } finally {
             loader.style.display = 'none';
             if (currentPhotos.length > 0) {
@@ -831,7 +841,7 @@
         showToast('Скачивание начато');
     }
 
-    // --- УДАЛЕНИЕ ФОТО (по ID) ---
+    // --- УДАЛЕНИЕ ФОТО (по ID, через прокси) ---
     async function promptDeleteCurrentPhoto() {
         if (!currentPhotos.length) return;
         const password = prompt('Введите пароль администратора:');
@@ -842,7 +852,9 @@
         const photo = currentPhotos[currentLightboxIndex];
         if (!confirm(`Вы уверены, что хотите удалить фото "${photo.name || 'без названия'}"?`)) return;
         try {
-            const response = await fetch(`${API_URL}/image/delete/${photo.id}`, {
+            const targetUrl = `${API_URL}/image/delete/${photo.id}`;
+            const proxyUrl = CORS_PROXY + targetUrl;
+            const response = await fetch(proxyUrl, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
@@ -899,6 +911,11 @@
         }
     }
     createPetals();
+
+    // Небольшое уведомление для первого запуска
+    setTimeout(() => {
+        console.log('Для работы CORS-прокси может потребоваться перейти по ссылке: https://cors-anywhere.herokuapp.com/corsdemo и нажать "Request temporary access"');
+    }, 1000);
 </script>
 </body>
 </html>
