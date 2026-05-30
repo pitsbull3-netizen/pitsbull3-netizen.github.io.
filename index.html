@@ -533,9 +533,8 @@
 
 <script>
     // ========== НАСТРОЙКИ ==========
-    const PROXY_URL = 'https://script.google.com/macros/s/AKfycbwPt4f4jIeY666fIGy4H95bKvp9hZe-CNPkfHGOkTPduHnxRIVfi3U3ttjf-SB2urI/exec';
+    const PROXY_URL = 'https://script.google.com/macros/s/AKfycbz6F73jOgT0RykluT1clHinqvKF-eNGFF6reXKz8SguC6D1Wj9ntIVr5gEb_PKc_WXx/exec';
     const ALBUM_ID = 'my4n9zV';
-    const ADMIN_PASSWORD = '07102024';
     
     let selectedFiles = [];
     let currentPhotos = [];
@@ -628,7 +627,7 @@
         document.getElementById('uploadBtn').disabled = false;
     }
     
-    // === ЗАГРУЗКА ФОТО через прокси ===
+    // === ЗАГРУЗКА ФОТО ===
     async function uploadMultiplePhotos() {
         if (!selectedFiles.length) { showToast('Выберите хотя бы одно фото'); return; }
         const guestName = document.getElementById('guestName').value.trim() || 'Гость';
@@ -659,9 +658,8 @@
                     body: formData
                 });
                 const data = await response.json();
-                console.log('Ответ прокси (загрузка):', data);
-                
-                if (data && data.success === true && data.data && data.data.length > 0) {
+                console.log('Upload response:', data);
+                if (data && data.success === true) {
                     successCount++;
                 } else {
                     throw new Error(data.message || 'Ошибка загрузки');
@@ -704,7 +702,7 @@
         document.getElementById('successMsg').style.display = 'none';
     }
     
-    // === ПОЛУЧЕНИЕ СПИСКА ФОТО ИЗ АЛЬБОМА через прокси ===
+    // === ПОЛУЧЕНИЕ СПИСКА ФОТО ===
     async function loadAlbumPhotos() {
         const emptyState = document.getElementById('emptyState');
         const scrollDiv = document.getElementById('galleryScroll');
@@ -717,13 +715,16 @@
         
         try {
             const url = `${PROXY_URL}?album=${ALBUM_ID}`;
-            console.log('Запрос к прокси (GET):', url);
-            const response = await fetch(url, { method: 'GET' });
+            console.log('Fetching album from proxy:', url);
+            const response = await fetch(url);
             const data = await response.json();
-            console.log('Ответ прокси (альбом):', data);
+            console.log('Album data:', data);
             
+            // Ожидаемая структура ответа от ImageBan через прокси:
+            // { success: true, data: { image: [ { id, link, url_thumb, img_name, date }, ... ] } }
             if (data && data.success === true && data.data && data.data.image && Array.isArray(data.data.image)) {
                 const images = data.data.image;
+                console.log(`Найдено фото: ${images.length}`);
                 currentPhotos = images.map(img => ({
                     id: img.id,
                     url: img.link,
@@ -735,16 +736,16 @@
                 currentPhotos.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
                 renderGallery(currentPhotos);
             } else {
-                console.warn('Альбом пуст или структура неожиданна', data);
-                if (data.data && data.data.image_count === 0) {
+                console.warn('Нет фото или структура ответа не соответствует ожидаемой', data);
+                if (data && data.data && data.data.image_count === 0) {
                     emptyState.style.display = 'block';
                 } else {
-                    showToast('Нет фото или ошибка доступа');
+                    showToast('Не удалось загрузить фото. Проверьте консоль.');
                 }
             }
         } catch (err) {
             console.error('Ошибка загрузки альбома:', err);
-            showToast('Не удалось загрузить альбом. Проверьте консоль.');
+            showToast('Ошибка загрузки. Смотрите консоль (F12).');
         } finally {
             loader.style.display = 'none';
             if (currentPhotos.length > 0) {
@@ -809,7 +810,7 @@
     }
     
     async function promptDeleteCurrentPhoto() {
-        showToast('Удаление через админ-пароль пока не реализовано в этой версии, но вы можете удалить фото вручную на сайте ImageBan.');
+        showToast('Удаление фото доступно только в личном кабинете ImageBan');
     }
     
     document.addEventListener('keydown', (e) => {
