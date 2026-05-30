@@ -534,12 +534,13 @@
 <script>
     // ========== ВАШИ ДАННЫЕ ДЛЯ IMAGEBAN ==========
     const IMAGEBAN_SECRET_KEY = 'W17NJt0mUNi1BNs6O78HwQEQvIEZT8yxM0n';
+    const ALBUM_ID = 'my4n9zV';
     const API_URL = 'https://api.imageban.ru/v1';
     const ADMIN_PASSWORD = '07102024';
 
     // Глобальные переменные
     let selectedFiles = [];
-    let currentPhotos = [];      // массив объектов { url, thumb, name?, id? }
+    let currentPhotos = [];
     let currentLightboxIndex = 0;
 
     function showToast(msg) {
@@ -563,7 +564,7 @@
     async function openGalleryModal() {
         document.getElementById('galleryModal').classList.add('active');
         document.body.style.overflow = 'hidden';
-        await loadMyPhotos();
+        await loadAlbumPhotos();
     }
 
     function scrollToHero() {
@@ -630,7 +631,7 @@
         document.getElementById('uploadBtn').disabled = false;
     }
 
-    // --- ЗАГРУЗКА ФОТО (не указываем альбом, загружаем в корень) ---
+    // --- ЗАГРУЗКА ФОТО (теперь с правильным указанием альбома) ---
     async function uploadMultiplePhotos() {
         if (!selectedFiles.length) { showToast('Выберите хотя бы одно фото'); return; }
         const guestName = document.getElementById('guestName').value.trim() || 'Гость';
@@ -652,7 +653,8 @@
 
             const formData = new FormData();
             formData.append('image', file);
-            // ВАЖНО: не передаём album, загружаем в корень аккаунта
+            // ВАЖНО! Указываем ID альбома
+            formData.append('album', ALBUM_ID);
             formData.append('name', guestName);
 
             try {
@@ -673,7 +675,6 @@
             } catch (err) {
                 console.error('Ошибка загрузки:', err);
                 showToast(`Ошибка при загрузке ${file.name}: ${err.message}`);
-                // Увеличиваем счётчик неудачных? Нет, просто логируем
             }
         }
         fill.style.width = '100%';
@@ -684,9 +685,8 @@
                 document.getElementById('successMsg').style.display = 'block';
             }, 500);
             showToast(`✅ Загружено ${successCount} фото!`);
-            // Обновляем галерею, если она открыта
             if (document.getElementById('galleryModal').classList.contains('active')) {
-                await loadMyPhotos();
+                await loadAlbumPhotos();
             }
         } else {
             showToast(`Загружено ${successCount} из ${selectedFiles.length}. Попробуйте ещё раз.`);
@@ -710,8 +710,8 @@
         document.getElementById('successMsg').style.display = 'none';
     }
 
-    // --- ПОЛУЧЕНИЕ ВСЕХ ФОТО ИЗ КОРНЯ АККАУНТА ---
-    async function loadMyPhotos() {
+    // --- ПОЛУЧЕНИЕ ФОТО ИЗ АЛЬБОМА (ПРАВИЛЬНЫЙ ЗАПРОС) ---
+    async function loadAlbumPhotos() {
         const emptyState = document.getElementById('emptyState');
         const scrollDiv = document.getElementById('galleryScroll');
         const loader = document.getElementById('galleryLoader');
@@ -721,22 +721,24 @@
         currentPhotos = [];
 
         try {
-            // Получаем все фото из корня аккаунта (пагинация 1-я страница, 500 элементов)
-            const response = await fetch(`${API_URL}/image/my/1/500`, {
+            // Формируем правильный URL для получения информации об альбоме
+            const response = await fetch(`${API_URL}/album/${ALBUM_ID}`, {
                 headers: {
                     'Authorization': `Bearer ${IMAGEBAN_SECRET_KEY}`
                 }
             });
             const data = await response.json();
-            if (data && data.images && Array.isArray(data.images)) {
-                currentPhotos = data.images.map(img => ({
+            // Проверяем ответ: поле success и наличие массива image внутри data
+            if (data && data.success === true && data.data && data.data.image && Array.isArray(data.data.image)) {
+                // Преобразуем данные для отображения
+                currentPhotos = data.data.image.map(img => ({
                     url: img.link,
-                    thumb: img.url_thumb || img.link,
+                    thumb: img.link,
                     name: img.img_name || img.name || 'Гость',
                     id: img.id,
                     date: img.date
                 }));
-                // Сортируем по убыванию даты (новые сверху)
+                // Сортируем от новых к старым
                 currentPhotos.sort((a, b) => (b.date || 0).localeCompare(a.date || 0));
                 renderGallery(currentPhotos);
             } else {
@@ -745,8 +747,8 @@
                 renderGallery(currentPhotos);
             }
         } catch (err) {
-            console.error('Ошибка загрузки фото:', err);
-            showToast('Не удалось загрузить фото. Попробуйте позже.');
+            console.error('Ошибка загрузки альбома:', err);
+            showToast('Не удалось загрузить альбом. Попробуйте позже.');
         }
         loader.style.display = 'none';
         if (currentPhotos.length === 0) {
@@ -811,7 +813,7 @@
         showToast('Скачивание начато');
     }
 
-    // --- УДАЛЕНИЕ ФОТО (с использованием авторизованного метода) ---
+    // --- УДАЛЕНИЕ ФОТО (по ID) ---
     async function promptDeleteCurrentPhoto() {
         if (!currentPhotos.length) return;
         const password = prompt('Введите пароль администратора:');
@@ -830,7 +832,6 @@
             });
             const data = await response.json();
             if (data.success) {
-                // Удаляем из локального массива
                 currentPhotos.splice(currentLightboxIndex, 1);
                 renderGallery(currentPhotos);
                 closeLightbox();
